@@ -32,6 +32,6 @@ def charger_ais(input_file):#pour préparer la simulation en temps réel
 
             while temps > len(data)-1:
                 data.append([]) #secondes pendant lesquelles rien est reçu
-            data[temps].append([mmsi,[temps, latitude, longitude, vitesse_lat, vitesse_lon]])
+            data[temps].append([mmsi,[temps, longitude, latitude, vitesse_lat, vitesse_lon]])
 
     return data

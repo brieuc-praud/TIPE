@@ -6,10 +6,11 @@ output_file='../bdd.csv'
 dates = ("2017-01-01")
 heures=('00','01','02','03','04') #heures à sélectionner
 #carré dans lequel les données vont être conservées
-latitude_min=42.5
-latitude_max=latitude_min+3
-longitude_min=-69.5
-longitude_max=longitude_min+3
+n=5
+latitude_min=42.5-1
+latitude_max=latitude_min+n
+longitude_min=-69.5-1
+longitude_max=longitude_min+n
 
 
 import csv

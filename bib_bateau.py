@@ -19,6 +19,7 @@ class Embarcation:
         ym = round((latitude - self._latitude_min)*self._echelle)
         return xm, ym
 
+
 class Bateau(Embarcation):
     class Kalman:
         def __init__(self, Q, R, vecteur_kalman):#vecteur_kalman = [latitude, longitude, vitesse_latitudinale, vitesse_longitudinale]
@@ -58,8 +59,8 @@ class Bateau(Embarcation):
 
     def __init__(self, mmsi, vecteur, echelle, longitude_min, latitude_min):#vecteur = [instant, latitude, longitude, vitesse_latitudinale, vitesse_longitudinale]
         super().__init__(echelle, longitude_min, latitude_min)
-        Q = 1e5*np.array([[1e-6,0,0,0],[0,1e-6,0,0],[0,0,1e-11,0],[0,0,0,1e-11]])#Q
-        R = 1e4*np.array([[1e-6,0,0,0],[0,1e-6,0,0],[0,0,1e-11,0],[0,0,0,1e-11]])#R
+        Q = 1e3*np.array([[1e-6,0,0,0],[0,1e-6,0,0],[0,0,1e-11,0],[0,0,0,1e-11]])#Q
+        R = np.array([[1e-6,0,0,0],[0,1e-6,0,0],[0,0,1e-11,0],[0,0,0,1e-11]])#R
 
         self._mmsi = mmsi
         self._r_risque = 50#rayon sur lequel on devra calculer le risque autour d'une position donnée
@@ -68,9 +69,14 @@ class Bateau(Embarcation):
         self._vecteurs =[vecteur]#cette liste contiendra les deux derniers vecteurs ajoutés, ce sera utile pour le filtre.
         self._Dernier_risque = []#[mini, maxi, MAT]
     def _calculer_delta_t(self, mon_bateau):
-        vitesse = 5
-        self._depart = 2
-        return 3600*24
+        vitesse = 1e-6
+        vecteur = self._vecteurs[-1]
+        position1 = mon_bateau.recuperer_position()
+        lon0, lat0 = vecteur[1], vecteur[2]
+        lon1, lat1 = position1[0], position1[1]
+        distance = np.sqrt((lon1-lon0)**2 + (lat1-lat0)**2)#distance euclidienne
+        delta_t = round(distance/vitesse)
+        return delta_t
     def _maj_risque(self, MAT_risque, kalman, mon_bateau):
         def changer_repere(res, r, theta):
             #création du repere
@@ -92,8 +98,8 @@ class Bateau(Embarcation):
         delta_t_pred = self._calculer_delta_t(mon_bateau)
         X_prime, P_prime = kalman._predire(delta_t_pred)
 
-        posx, posy = self._convertir(X[1], X[0])
-        kalx, kaly = self._convertir(X_prime[1], X_prime[0])
+        posx, posy = self._convertir(X[0], X[1])
+        kalx, kaly = self._convertir(X_prime[0], X_prime[1])
         xmin, xmax, ymin, ymax = min(posx, kalx), max(posx, kalx), min(posy, kaly), max(posy, kaly)
         mini, maxi = min(xmin, ymin), max(xmax, ymax)
 
@@ -104,9 +110,8 @@ class Bateau(Embarcation):
         else:
              theta = 0
         sig = r/4
-        #print("var="+str(var))
 
-        varx, vary, varx_prime, vary_prime = P[1,1], P[0,0], P_prime[1,1], P_prime[0,0]
+        varx, vary, varx_prime, vary_prime = P[0,0], P[1,1], P_prime[0,0], P_prime[1,1]
         sigx, sigy, sigx_prime, sigy_prime = np.sqrt(varx), np.sqrt(vary), np.sqrt(varx_prime), np.sqrt(vary_prime)
         sigu = np.cos(theta)*sigx + np.sin(theta)*sigy
         sigv = -np.sin(theta)*sigx + np.cos(theta)*sigy
@@ -115,15 +120,26 @@ class Bateau(Embarcation):
 
         R = self._r_risque
         U, V = changer_repere(maxi-mini+2*R, r, theta)
-        #print("varx="+str(varx_prime))
+
         G = Risque(U, V, sigu+sig, sigv, sigu_prime, sigv_prime)
 
+        def tronquer(G, min, max, taille, taille_tot):
+            taille = taille[0]
+            if min < 0:
+                G = G[-taille, -taille]
+            elif max >= taille_tot:
+                G = G[taille, taille]
+            return G
+
+        G = tronquer(G, mini-R, maxi+R, MAT_risque[mini-R:maxi+R, mini-R:maxi+R].shape, MAT_risque.shape[0])
         D = self._Dernier_risque
         if D:#si il y a le précedent risque de ce bateau à effacer, alors
             MAT_risque[D[0]-R:D[1]+R, D[0]-R:D[1]+R] = MAT_risque[D[0]-R:D[1]+R, D[0]-R:D[1]+R] - D[2]
 
         MAT_risque[mini-R:maxi+R, mini-R:maxi+R] = MAT_risque[mini-R:maxi+R, mini-R:maxi+R] + G
         self._Dernier_risque=[mini, maxi, G]
+
+
     def append(self, vecteur, MAT_risque, mon_bateau):#méthode appelée pour ajouter une mesure au bateau
         if len(self._vecteurs) == 2:#kalman utilise les instants t et t+1
             self._vecteurs[0], self._vecteurs[1] = self._vecteurs[1], vecteur
@@ -139,7 +155,7 @@ class MonBateau(Embarcation):
         super().__init__(echelle, longitude_min, latitude_min)
 
         self._Graphe = dij.graphe(n) #Le graphe pour Dijkstra
-        self._depart, self._arrivee = (-69,42), (-66,45)
+        self._depart, self._arrivee = (-68,43), (-66,45)
 
         manager = mp.Manager()
         self._return_dict = manager.dict()

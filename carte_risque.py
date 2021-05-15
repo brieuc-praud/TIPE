@@ -17,7 +17,7 @@ if __name__ == '__main__':#nécessaire pour le multiprocessing
     base_de_données='bdd.csv'
 
     ##localisation de l'étude
-    n, echelle = 5, 100#la largeur de la carte est alors d'environ 300 km
+    n, echelle = 5, 150#la largeur de la carte est d'environ n*echelle km
     latitude_min = 42.5-1
     latitude_max = latitude_min + n
     longitude_min = -69.5-1
@@ -38,11 +38,6 @@ if __name__ == '__main__':#nécessaire pour le multiprocessing
 
     M=np.ones((n,n))
     mon_bateau = bat.MonBateau(n, echelle, longitude_min, latitude_min)
-
-    # x=np.linspace(0,n, num=n)
-    # y=np.linspace(0,n, num=n)
-    # x, y = np.meshgrid(x, y)
-
 
     #charger données
     data = ais.charger_ais(base_de_données)
