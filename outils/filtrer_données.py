@@ -5,6 +5,9 @@ output_file='../bdd.csv'
 
 dates = ("2017-01-01")
 heures=('00','01','02','03','04') #heures à sélectionner
+#heures=('05','06','07','08','09') #heures à sélectionner
+#heures=('10','11','12','13','14') #heures à sélectionner
+#heures=('15','16','17','18','19') #heures à sélectionner
 #carré dans lequel les données vont être conservées
 n=5
 latitude_min=42.5-1

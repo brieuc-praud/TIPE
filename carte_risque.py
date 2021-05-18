@@ -1,11 +1,8 @@
 if __name__ == '__main__':#nécessaire pour le multiprocessing
 
     ##bibliothèques
-    import time
-
     import numpy as np
     import matplotlib.pyplot as plt
-    import matplotlib.animation as animation
     from matplotlib.colors import LogNorm
     import cartopy.crs as ccrs#à installer avec "pip install Cartopy-0.18.0-cp38-cp38-win_amd64.whl" (problèmes de dépendances si installée depuis les dépots de Python)
     ##bibliothèques personelles
@@ -17,7 +14,7 @@ if __name__ == '__main__':#nécessaire pour le multiprocessing
     base_de_données='bdd.csv'
 
     ##localisation de l'étude
-    n, echelle = 5, 150#la largeur de la carte est d'environ n*echelle km
+    n, echelle = 4, 200#la largeur de la carte est d'environ 500 km
     latitude_min = 42.5-1
     latitude_max = latitude_min + n
     longitude_min = -69.5-1
@@ -27,7 +24,7 @@ if __name__ == '__main__':#nécessaire pour le multiprocessing
     ##autres paramètres
     colormap='jet'#couleurs utilisées pour représenter le risque
     norme = LogNorm()#None
-    intervalle=10#temps d'attente entre deux tours de boucle (en millisecondes)
+    intervalle=1#temps d'attente entre deux tours de boucle (en millisecondes)
 
 
     ##initialisation
@@ -51,7 +48,7 @@ if __name__ == '__main__':#nécessaire pour le multiprocessing
     plt.ylim(latitude_min, latitude_max)
 
     im = axes.imshow(M, cmap='seismic')#dessine la carte de risque
-
+    compteur = 0
     ##pour quitter le programme lorsque l'on quitte la fenêtre
     trigger = False
     def handle_close(evt):
@@ -75,7 +72,10 @@ if __name__ == '__main__':#nécessaire pour le multiprocessing
                     boats[mmsi]=bat.Bateau(mmsi, infos[1], echelle, longitude_min, latitude_min)
                 boats[mmsi].append(infos[1], M, mon_bateau)#puis on met a jour sa position, sa vitesse et son angle.
 
-
+        # if temps%100 == 99:
+        #      mon_bateau.calculer_plus_court_chemin(M)
+        #      plt.savefig("DIJ"+str(compteur)+".svg")
+        #      compteur += 1
         mon_bateau.calculer_plus_court_chemin(M)
 
         #affiche la carte des risques

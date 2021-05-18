@@ -57,21 +57,21 @@ class Bateau(Embarcation):
         def recuperer_etat(self):
             return self._X, self._P
 
-    def __init__(self, mmsi, vecteur, echelle, longitude_min, latitude_min):#vecteur = [instant, latitude, longitude, vitesse_latitudinale, vitesse_longitudinale]
+    def __init__(self, mmsi, vecteur, echelle, longitude_min, latitude_min):#vecteur = [instant, longitude, latitude, vitesse_longitudinale, vitesse_latitudinale]
         super().__init__(echelle, longitude_min, latitude_min)
         Q = 1e3*np.array([[1e-6,0,0,0],[0,1e-6,0,0],[0,0,1e-11,0],[0,0,0,1e-11]])#Q
         R = np.array([[1e-6,0,0,0],[0,1e-6,0,0],[0,0,1e-11,0],[0,0,0,1e-11]])#R
 
         self._mmsi = mmsi
-        self._r_risque = 50#rayon sur lequel on devra calculer le risque autour d'une position donnée
+        self._r_risque = 30#rayon sur lequel on devra calculer le risque autour d'une position donnée
 
         self._kalman = Bateau.Kalman(Q, R, vecteur[1:])
         self._vecteurs =[vecteur]#cette liste contiendra les deux derniers vecteurs ajoutés, ce sera utile pour le filtre.
         self._Dernier_risque = []#[mini, maxi, MAT]
     def _calculer_delta_t(self, mon_bateau):
-        vitesse = 1e-6
+        vitesse = mon_bateau.vitesse()
         vecteur = self._vecteurs[-1]
-        position1 = mon_bateau.recuperer_position()
+        position1 = mon_bateau.position()
         lon0, lat0 = vecteur[1], vecteur[2]
         lon1, lat1 = position1[0], position1[1]
         distance = np.sqrt((lon1-lon0)**2 + (lat1-lat0)**2)#distance euclidienne
@@ -85,13 +85,17 @@ class Bateau(Embarcation):
             #rotation
             U, V = X*np.cos(theta) - Y*np.sin(theta), X*np.sin(theta) + Y*np.cos(theta)
             #translation
-            U = U + r/2
+            U = U - r/2
             return U, V
         def Risque(X, Y, sigx, sigy, sigx_prime, sigy_prime):#crée une matrice avec une répartition normale
             T = np.linspace(0,1,len(X))
             Sx = (1-T)*sigx + T*sigx_prime
             Sy = (1-T)*sigy + T*sigy_prime
-            return 100*np.exp(-X**2/(2*Sx**2) - Y**2/(2*Sy**2))
+            if not ((0 in Sx) or (0 in Sy)):
+                R = 1e10*np.exp(-X**2/(2*Sx**2) - Y**2/(2*Sy**2))
+            else:
+                R = 1e10*np.exp(-X**2/2 - Y**2/2)
+            return R
 
         X, P = kalman.recuperer_etat()
 
@@ -113,6 +117,7 @@ class Bateau(Embarcation):
 
         varx, vary, varx_prime, vary_prime = P[0,0], P[1,1], P_prime[0,0], P_prime[1,1]
         sigx, sigy, sigx_prime, sigy_prime = np.sqrt(varx), np.sqrt(vary), np.sqrt(varx_prime), np.sqrt(vary_prime)
+        #sigx_prime, sigy_prime = sigx_prime*5, sigy_prime*5
         sigu = np.cos(theta)*sigx + np.sin(theta)*sigy
         sigv = -np.sin(theta)*sigx + np.cos(theta)*sigy
         sigu_prime = np.cos(theta)*sigx_prime + np.sin(theta)*sigy_prime
@@ -124,11 +129,14 @@ class Bateau(Embarcation):
         G = Risque(U, V, sigu+sig, sigv, sigu_prime, sigv_prime)
 
         def tronquer(G, min, max, taille, taille_tot):
-            taille = taille[0]
-            if min < 0:
-                G = G[-taille, -taille]
-            elif max >= taille_tot:
-                G = G[taille, taille]
+            try:
+                taille = taille[0]
+                if min < 0:
+                    G = G[-taille, -taille]
+                elif max >= taille_tot:
+                    G = G[taille, taille]
+            except IndexError:
+                G = np.zeros(taille)
             return G
 
         G = tronquer(G, mini-R, maxi+R, MAT_risque[mini-R:maxi+R, mini-R:maxi+R].shape, MAT_risque.shape[0])
@@ -155,7 +163,8 @@ class MonBateau(Embarcation):
         super().__init__(echelle, longitude_min, latitude_min)
 
         self._Graphe = dij.graphe(n) #Le graphe pour Dijkstra
-        self._depart, self._arrivee = (-68,43), (-66,45)
+        self._depart, self._arrivee = (-68.75,44.1),(-69.2,42.3)#(-66,46), (-70,42)#(-70.5,41.5), (-65.5,46.5)
+        self._vitesse = 1e-6
 
         manager = mp.Manager()
         self._return_dict = manager.dict()
@@ -166,13 +175,25 @@ class MonBateau(Embarcation):
         chemin = dij.trajet(self._Graphe, M, depart, arrivee)[1]
         LON, LAT = dij.preparer_trajet(chemin, self._echelle, self._longitude_min, self._latitude_min)
         self._return_dict["LON"], self._return_dict["LAT"], self._return_dict["chemin"] = LON, LAT, chemin
-    def recuperer_position(self):
+    def position(self):
         return self._depart
+    def vitesse(self):
+        return self._vitesse
     def calculer_plus_court_chemin(self, M):
+        fausse_vitesse = 10
         if not self._dij_proc.is_alive():#On relance le calcul seulement si le précédent est fini
             self._dij_proc = mp.Process(target=self._dijkstra, args=[M])
             self._dij_proc.start()
             chemin = self._return_dict["chemin"]
-            #if len(chemin):
-            #    dep = (chemin[vitesse_bateau_suivi][0], chemin[vitesse_bateau_suivi][1])#on fait avancer le bateau suivi
-            dij.affiche_trajet(self._return_dict["LON"], self._return_dict["LAT"])
+            LON, LAT = self._return_dict["LON"], self._return_dict["LAT"]
+            if len(LON):#len(LON)=len(LAT)
+                self._depart = (LON[fausse_vitesse], LAT[fausse_vitesse])#on fait avancer le bateau suivi
+            dij.affiche_trajet(LON, LAT)
+
+    # def calculer_plus_court_chemin(self, M):
+    #     self._dijkstra(M)
+    #     dij.affiche_trajet(self._return_dict["LON"], self._return_dict["LAT"])
+    #     LON, LAT = self._return_dict["LON"], self._return_dict["LAT"]
+    #     if len(LON):
+    #         vitesse_bateau_suivi = 10
+    #         self._depart = (LON[vitesse_bateau_suivi], LAT[vitesse_bateau_suivi])
